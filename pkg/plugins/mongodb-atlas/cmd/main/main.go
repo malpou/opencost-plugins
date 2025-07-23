@@ -55,8 +55,7 @@ func main() {
 	var currencyConverter currency.Converter
 	if atlasConfig.ExchangeAPIKey != "" && atlasConfig.TargetCurrency != "USD" {
 		converter, err := currency.NewConverter(currency.Config{
-			APIKey:   atlasConfig.ExchangeAPIKey,
-			CacheTTL: 24 * time.Hour,
+			APIKey: atlasConfig.ExchangeAPIKey,
 		})
 		if err != nil {
 			log.Warnf("Failed to initialize currency converter: %v. Will use USD.", err)
