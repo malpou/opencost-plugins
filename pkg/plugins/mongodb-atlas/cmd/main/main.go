@@ -32,7 +32,10 @@ var handshakeConfig = plugin.HandshakeConfig{
 	MagicCookieValue: "mongodb-atlas",
 }
 
-const costExplorerPendingInvoicesURL = "https://cloud.mongodb.com/api/atlas/v2/orgs/%s/invoices/pending"
+const (
+	costExplorerPendingInvoicesURL = "https://cloud.mongodb.com/api/atlas/v2/orgs/%s/invoices/pending"
+	defaultCurrency                = "USD"
+)
 
 func main() {
 	log.Debug("Initializing Mongo plugin")
@@ -53,12 +56,12 @@ func main() {
 	rateLimiter := rate.NewLimiter(1.1, 2)
 
 	var currencyConverter currency.Converter
-	if atlasConfig.ExchangeAPIKey != "" && atlasConfig.TargetCurrency != "USD" {
+	if atlasConfig.ExchangeAPIKey != "" && atlasConfig.TargetCurrency != defaultCurrency {
 		converter, err := currency.NewConverter(currency.Config{
 			APIKey: atlasConfig.ExchangeAPIKey,
 		})
 		if err != nil {
-			log.Warnf("Failed to initialize currency converter: %v. Will use USD.", err)
+			log.Warnf("Failed to initialize currency converter: %v. Will use %s.", err, defaultCurrency)
 		} else {
 			currencyConverter = converter
 			log.Infof("Currency converter initialized for target currency: %s", atlasConfig.TargetCurrency)
@@ -238,31 +241,29 @@ func (a *AtlasCostSource) getAtlasCostsForWindow(win *opencost.Window, lineItems
 
 	costsInWindow := filterLineItemsByWindow(win, lineItems)
 
-	respCurrency := "USD"
-	if a.currencyConverter != nil && a.targetCurrency != "USD" && a.targetCurrency != "" {
+	if a.currencyConverter != nil && a.targetCurrency != defaultCurrency && a.targetCurrency != "" {
 		for _, cost := range costsInWindow {
-			if convertedBilled, err := a.currencyConverter.Convert(float64(cost.BilledCost), "USD", a.targetCurrency); err == nil {
+			if convertedBilled, err := a.currencyConverter.Convert(float64(cost.BilledCost), defaultCurrency, a.targetCurrency); err == nil {
 				cost.BilledCost = float32(convertedBilled)
 			} else {
 				log.Debugf("Failed to convert billed cost: %v", err)
 			}
 
-			if convertedList, err := a.currencyConverter.Convert(float64(cost.ListCost), "USD", a.targetCurrency); err == nil {
+			if convertedList, err := a.currencyConverter.Convert(float64(cost.ListCost), defaultCurrency, a.targetCurrency); err == nil {
 				cost.ListCost = float32(convertedList)
 			} else {
 				log.Debugf("Failed to convert list cost: %v", err)
 			}
 
-			if convertedUnit, err := a.currencyConverter.Convert(float64(cost.ListUnitPrice), "USD", a.targetCurrency); err == nil {
+			if convertedUnit, err := a.currencyConverter.Convert(float64(cost.ListUnitPrice), defaultCurrency, a.targetCurrency); err == nil {
 				cost.ListUnitPrice = float32(convertedUnit)
 			} else {
 				log.Debugf("Failed to convert unit price: %v", err)
 			}
 		}
-		respCurrency = a.targetCurrency
 
-		if rate, err := a.currencyConverter.GetRate("USD", a.targetCurrency); err == nil {
-			log.Debugf("Using exchange rate USD to %s: %f", a.targetCurrency, rate)
+		if exchangeRate, err := a.currencyConverter.GetRate(defaultCurrency, a.targetCurrency); err == nil {
+			log.Debugf("Using exchange rate %s to %s: %f", defaultCurrency, a.targetCurrency, exchangeRate)
 		}
 	}
 
@@ -271,7 +272,7 @@ func (a *AtlasCostSource) getAtlasCostsForWindow(win *opencost.Window, lineItems
 		CostSource: "data_storage",
 		Domain:     "mongodb-atlas",
 		Version:    "v1",
-		Currency:   respCurrency,
+		Currency:   a.targetCurrency,
 		Start:      timestamppb.New(*win.Start()),
 		End:        timestamppb.New(*win.End()),
 		Errors:     []string{},
