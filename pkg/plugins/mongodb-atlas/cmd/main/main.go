@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/go-plugin"
 	"github.com/icholy/digest"
 	commonconfig "github.com/opencost/opencost-plugins/common/config"
+	"github.com/opencost/opencost-plugins/pkg/common/currency"
 	atlasconfig "github.com/opencost/opencost-plugins/pkg/plugins/mongodb-atlas/config"
 	atlasplugin "github.com/opencost/opencost-plugins/pkg/plugins/mongodb-atlas/plugin"
 	"github.com/opencost/opencost/core/pkg/log"
@@ -50,9 +51,26 @@ func main() {
 	// as per https://www.mongodb.com/docs/atlas/api/atlas-admin-api-ref/,
 	// atlas admin APIs have a limit of 100 requests per minute
 	rateLimiter := rate.NewLimiter(1.1, 2)
+
+	var currencyConverter currency.Converter
+	if atlasConfig.ExchangeAPIKey != "" && atlasConfig.TargetCurrency != "USD" {
+		converter, err := currency.NewConverter(currency.Config{
+			APIKey:   atlasConfig.ExchangeAPIKey,
+			CacheTTL: 24 * time.Hour,
+		})
+		if err != nil {
+			log.Warnf("Failed to initialize currency converter: %v. Will use USD.", err)
+		} else {
+			currencyConverter = converter
+			log.Infof("Currency converter initialized for target currency: %s", atlasConfig.TargetCurrency)
+		}
+	}
+
 	atlasCostSrc := AtlasCostSource{
-		rateLimiter: rateLimiter,
-		orgID:       atlasConfig.OrgID,
+		rateLimiter:       rateLimiter,
+		orgID:             atlasConfig.OrgID,
+		targetCurrency:    atlasConfig.TargetCurrency,
+		currencyConverter: currencyConverter,
 	}
 	atlasCostSrc.atlasClient = getAtlasClient(*atlasConfig)
 
@@ -80,9 +98,11 @@ func getAtlasClient(atlasConfig atlasconfig.AtlasConfig) HTTPClient {
 
 // Implementation of CustomCostSource
 type AtlasCostSource struct {
-	orgID       string
-	rateLimiter *rate.Limiter
-	atlasClient HTTPClient
+	orgID             string
+	rateLimiter       *rate.Limiter
+	atlasClient       HTTPClient
+	targetCurrency    string
+	currencyConverter currency.Converter
 }
 
 type HTTPClient interface {
@@ -217,16 +237,42 @@ func filterLineItemsByWindow(win *opencost.Window, lineItems []atlasplugin.LineI
 
 func (a *AtlasCostSource) getAtlasCostsForWindow(win *opencost.Window, lineItems []atlasplugin.LineItem) *pb.CustomCostResponse {
 
-	//filter responses between the win start and win end dates
-
 	costsInWindow := filterLineItemsByWindow(win, lineItems)
+
+	respCurrency := "USD"
+	if a.currencyConverter != nil && a.targetCurrency != "USD" && a.targetCurrency != "" {
+		for _, cost := range costsInWindow {
+			if convertedBilled, err := a.currencyConverter.Convert(float64(cost.BilledCost), "USD", a.targetCurrency); err == nil {
+				cost.BilledCost = float32(convertedBilled)
+			} else {
+				log.Debugf("Failed to convert billed cost: %v", err)
+			}
+
+			if convertedList, err := a.currencyConverter.Convert(float64(cost.ListCost), "USD", a.targetCurrency); err == nil {
+				cost.ListCost = float32(convertedList)
+			} else {
+				log.Debugf("Failed to convert list cost: %v", err)
+			}
+
+			if convertedUnit, err := a.currencyConverter.Convert(float64(cost.ListUnitPrice), "USD", a.targetCurrency); err == nil {
+				cost.ListUnitPrice = float32(convertedUnit)
+			} else {
+				log.Debugf("Failed to convert unit price: %v", err)
+			}
+		}
+		respCurrency = a.targetCurrency
+
+		if rate, err := a.currencyConverter.GetRate("USD", a.targetCurrency); err == nil {
+			log.Debugf("Using exchange rate USD to %s: %f", a.targetCurrency, rate)
+		}
+	}
 
 	resp := pb.CustomCostResponse{
 		Metadata:   map[string]string{"api_client_version": "v1"},
 		CostSource: "data_storage",
 		Domain:     "mongodb-atlas",
 		Version:    "v1",
-		Currency:   "USD",
+		Currency:   respCurrency,
 		Start:      timestamppb.New(*win.Start()),
 		End:        timestamppb.New(*win.End()),
 		Errors:     []string{},

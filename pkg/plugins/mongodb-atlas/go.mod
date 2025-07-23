@@ -4,10 +4,13 @@ go 1.22.5
 
 replace github.com/opencost/opencost-plugins/common => ../../common
 
+replace github.com/opencost/opencost-plugins/pkg/common/currency => ../../common/currency
+
 require (
 	github.com/hashicorp/go-plugin v1.6.1
 	github.com/icholy/digest v0.1.23
 	github.com/opencost/opencost-plugins/common v0.0.0-00010101000000-000000000000
+	github.com/opencost/opencost-plugins/pkg/common/currency v0.0.0-00010101000000-000000000000
 	github.com/opencost/opencost/core v0.0.0-20240829194822-b82370afd830
 	github.com/stretchr/testify v1.9.0
 	golang.org/x/time v0.6.0
