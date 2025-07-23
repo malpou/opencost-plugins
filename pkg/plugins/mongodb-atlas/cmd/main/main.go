@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/go-plugin"
 	"github.com/icholy/digest"
 	commonconfig "github.com/opencost/opencost-plugins/common/config"
-	"github.com/opencost/opencost-plugins/pkg/common/currency"
+	"github.com/opencost/opencost-plugins/common/currency"
 	atlasconfig "github.com/opencost/opencost-plugins/pkg/plugins/mongodb-atlas/config"
 	atlasplugin "github.com/opencost/opencost-plugins/pkg/plugins/mongodb-atlas/plugin"
 	"github.com/opencost/opencost/core/pkg/log"
