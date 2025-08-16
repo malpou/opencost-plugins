@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/opencost/opencost/pkg/currency"
 	"io"
 	"net/http"
 	"time"
@@ -10,7 +11,6 @@ import (
 	"github.com/hashicorp/go-plugin"
 	"github.com/icholy/digest"
 	commonconfig "github.com/opencost/opencost-plugins/common/config"
-	"github.com/opencost/opencost-plugins/common/currency"
 	atlasconfig "github.com/opencost/opencost-plugins/pkg/plugins/mongodb-atlas/config"
 	atlasplugin "github.com/opencost/opencost-plugins/pkg/plugins/mongodb-atlas/plugin"
 	"github.com/opencost/opencost/core/pkg/log"
@@ -117,7 +117,7 @@ func validateRequest(req *pb.CustomCostRequest) []string {
 	// 1. Check if resolution is less than a day
 	if req.Resolution.AsDuration() < 24*time.Hour {
 		var resolutionMessage = "Resolution should be at least one day."
-		log.Warnf(resolutionMessage)
+		log.Warnf("%s", resolutionMessage)
 		errors = append(errors, resolutionMessage)
 	}
 	// Get the start of the current month
@@ -126,14 +126,14 @@ func validateRequest(req *pb.CustomCostRequest) []string {
 	// 2. Check if start time is before the start of the current month
 	if req.Start.AsTime().Before(currentMonthStart) {
 		var startDateMessage = "Start date cannot be before the current month. Historical costs not currently supported"
-		log.Warnf(startDateMessage)
+		log.Warnf("%s", startDateMessage)
 		errors = append(errors, startDateMessage)
 	}
 
 	// 3. Check if end time is before the start of the current month
 	if req.End.AsTime().Before(currentMonthStart) {
 		var endDateMessage = "End date cannot be before the current month. Historical costs not currently supported"
-		log.Warnf(endDateMessage)
+		log.Warnf("%s", endDateMessage)
 		errors = append(errors, endDateMessage)
 	}
 
@@ -290,8 +290,8 @@ func GetPendingInvoices(org string, client HTTPClient) ([]atlasplugin.LineItem, 
 	response, error := client.Do(request)
 	if error != nil {
 		msg := fmt.Sprintf("getPending Invoices: error from server: %v", error)
-		log.Errorf(msg)
-		return nil, fmt.Errorf(msg)
+		log.Errorf("%s", msg)
+		return nil, fmt.Errorf("%s", msg)
 
 	}
 
@@ -302,8 +302,8 @@ func GetPendingInvoices(org string, client HTTPClient) ([]atlasplugin.LineItem, 
 	respUnmarshalError := json.Unmarshal([]byte(body), &pendingInvoicesResponse)
 	if respUnmarshalError != nil {
 		msg := fmt.Sprintf("pendingInvoices: error unmarshalling response: %v", respUnmarshalError)
-		log.Errorf(msg)
-		return nil, fmt.Errorf(msg)
+		log.Errorf("%s", msg)
+		return nil, fmt.Errorf("%s", msg)
 	}
 
 	return pendingInvoicesResponse.LineItems, nil
